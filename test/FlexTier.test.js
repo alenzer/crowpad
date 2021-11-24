@@ -7,11 +7,12 @@ chai.use(solidity);
 
 const expect = chai.expect;
 describe("FlexTierStakingContract", async () =>  {
-    let deployerAddress, flexTier, standardToken, deployer;
+    let deployerAddress, anotherUser1, flexTier, standardToken, deployer;
 
 beforeEach(async () =>  {
-    const [owner] = await ethers.getSigners();
+    const [owner, user1] = await ethers.getSigners();
     deployer = owner;
+    anotherUser1 = user1;
     const Token = await ethers.getContractFactory("StandardToken");
 
     standardToken = await Token.deploy(owner.address, "Demo Token","DT",18,1000000);
@@ -75,17 +76,16 @@ beforeEach(async () =>  {
 
     it("should calculate iPP correct for multiple staking by single user and then withdrawl", async () => {
         await standardToken.approve(flexTier.address,400);
-        await expect(() => flexTier.singleLock(deployerAddress,200)).to.changeTokenBalance(standardToken,deployer,-200);
+        await expect(() => flexTier.singleLock(anotherUser1.address,200)).to.changeTokenBalance(standardToken,deployer,-200);
+        await expect(() => flexTier.singleLock(anotherUser1.address,100)).to.changeTokenBalance(standardToken,deployer,-100);
         await expect(() => flexTier.singleLock(deployerAddress,100)).to.changeTokenBalance(standardToken,deployer,-100);
-        await expect(() => flexTier.singleLock('0xCc456df4ea3B13e78C22d5A27c8d55F6F2273d34',100)).to.changeTokenBalance(standardToken,deployer,-100);
-        const lockId = flexTier.USER_LOCKS(deployerAddress);
-        await expect(() => flexTier.withdraw(lockId)).to.changeTokenBalance(standardToken,deployer,+300);
+        const lockId = flexTier.USER_LOCKS(anotherUser1.address);
+        await expect(() => flexTier.connect(anotherUser1).withdraw(lockId)).to.changeTokenBalance(standardToken,anotherUser1,+300);
         const result1 = await flexTier.getPoolPercentagesWithUser(deployerAddress);
-        const result2 = await flexTier.getPoolPercentagesWithUser('0xCc456df4ea3B13e78C22d5A27c8d55F6F2273d34');
-        
-        expect(result1[0].toString()).to.equal('0');
+        const result2 = await flexTier.getPoolPercentagesWithUser(anotherUser1.address);
+        expect(result1[0].toString()).to.equal('1000');
         expect(result1[1].toString()).to.equal('1000');
-        expect(result2[0].toString()).to.equal('1000');
+        expect(result2[0].toString()).to.equal('0');
         expect(result2[1].toString()).to.equal('1000');
     });
   })

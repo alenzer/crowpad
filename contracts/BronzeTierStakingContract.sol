@@ -11,12 +11,12 @@ import "./ReentrancyGuard.sol";
 import "./IERC20.sol";
 import "./BaseTierStakingContract.sol";
 
-contract FlexTierStakingContract is BaseTierStakingContract {
-  uint8 public tierId = 0;
-  uint8 public multiplier = 10; // in 1000
-  uint8 public emergencyWithdrawlFee = 0;
+contract BronzeTierStakingContract is BaseTierStakingContract {
+  uint8 public tierId = 1;
+  uint8 public multiplier = 12; // in 1000
+  uint8 public emergencyWithdrawlFee = 12;
   uint8 public enableEmergencyWithdrawl = 1;
-  uint256 public unlockDuration = 0; // 
+  uint256 public unlockDuration = 30*24*60*60; // 1 month
   constructor( address _depositor, address _tokenAddress, address _feeAddress)
     BaseTierStakingContract(tierId,multiplier,emergencyWithdrawlFee,enableEmergencyWithdrawl, block.timestamp + unlockDuration, _depositor, _tokenAddress, _feeAddress) {
   }
