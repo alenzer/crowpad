@@ -38,10 +38,10 @@ module.exports = {
           chainId: 339,
        },
        dev: {
-          url: 'http://127.0.0.1:8545',
+          url: 'http://127.0.0.1:7545',
           accounts: [dev],
           network_id: '5777',
-          chainId: 31337,
+          chainId: 1337,
        },
     },
     solidity: {

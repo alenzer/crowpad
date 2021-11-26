@@ -34,29 +34,29 @@ beforeEach(async () =>  {
     });
 
     it("should revert if the amount is 0", async () => {
-      expect(bronzeTier.singleLock("0xf7439635a3d956b7f86a376A73cab7204371af38",0)).to.be.revertedWith("No AMT");
+      expect(bronzeTier.singleLock(deployerAddress,0)).to.be.revertedWith("No AMT");
     });
 
     it("should revert depositor allowed is different address", async () => {
       await bronzeTier.setDepositor(standardToken.address);
-      expect(bronzeTier.singleLock("0xf7439635a3d956b7f86a376A73cab7204371af38",1)).to.be.revertedWith("Only depositor can call this function");
+      expect(bronzeTier.singleLock(deployerAddress,1)).to.be.revertedWith("Only depositor can call this function");
     });
 
     it("should be revert for single lock with 99 wei", async () => {
         await standardToken.approve(bronzeTier.address,101);
-        expect(bronzeTier.singleLock("0xf7439635a3d956b7f86a376A73cab7204371af38",99)).to.be.revertedWith('MIN DEPOSIT');
+        expect(bronzeTier.singleLock(deployerAddress,99)).to.be.revertedWith('MIN DEPOSIT');
       });
     it("should be successful for single lock with more than 100 wei", async () => {
       await standardToken.approve(bronzeTier.address,101);
-      await expect(() => bronzeTier.singleLock("0xf7439635a3d956b7f86a376A73cab7204371af38",101)).to.changeTokenBalance(standardToken,deployer,-101);
+      await expect(() => bronzeTier.singleLock(deployerAddress,101)).to.changeTokenBalance(standardToken,deployer,-101);
     });
 
     it("should be successful for single lock and it should same iPP for both users with sum to be matched", async () => {
         await standardToken.approve(bronzeTier.address,300);
-        await expect(() => bronzeTier.singleLock("0xCc456df4ea3B13e78C22d5A27c8d55F6F2273d34",200)).to.changeTokenBalance(standardToken,deployer,-200);
-        await expect(() => bronzeTier.singleLock("0xf7439635a3d956b7f86a376A73cab7204371af38",100)).to.changeTokenBalance(standardToken,deployer,-100);
-        const result1 = await bronzeTier.getPoolPercentagesWithUser('0xCc456df4ea3B13e78C22d5A27c8d55F6F2273d34');
-        const result2 = await bronzeTier.getPoolPercentagesWithUser('0xf7439635a3d956b7f86a376A73cab7204371af38');
+        await expect(() => bronzeTier.singleLock(anotherUser1.address,200)).to.changeTokenBalance(standardToken,deployer,-200);
+        await expect(() => bronzeTier.singleLock(deployerAddress,100)).to.changeTokenBalance(standardToken,deployer,-100);
+        const result1 = await bronzeTier.getPoolPercentagesWithUser(anotherUser1.address);
+        const result2 = await bronzeTier.getPoolPercentagesWithUser(deployerAddress);
         
         expect(result1[0].toString()).to.equal('2400');
         expect(result1[1].toString()).to.equal('3600');
@@ -66,7 +66,7 @@ beforeEach(async () =>  {
 
     it("should calculate iPP correct for multiple staking by single user", async () => {
         await standardToken.approve(bronzeTier.address,300);
-        await expect(() => bronzeTier.singleLock("0xCc456df4ea3B13e78C22d5A27c8d55F6F2273d34",200)).to.changeTokenBalance(standardToken,deployer,-200);
+        await expect(() => bronzeTier.singleLock(anotherUser1.address,200)).to.changeTokenBalance(standardToken,deployer,-200);
         await expect(() => bronzeTier.singleLock("0xCc456df4ea3B13e78C22d5A27c8d55F6F2273d34",100)).to.changeTokenBalance(standardToken,deployer,-100);
         const result1 = await bronzeTier.getPoolPercentagesWithUser('0xCc456df4ea3B13e78C22d5A27c8d55F6F2273d34');
         
