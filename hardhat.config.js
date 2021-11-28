@@ -19,6 +19,12 @@ module.exports = {
          chainId: 25,
          gasPrice: 6000000000000, 
       },
+      roninmainnet: {
+         url: 'https://api.roninchain.com/rpc',
+         accounts: [deployer],
+         chainId: 2020,
+         gasPrice: 0, 
+      },
        cronostestnet: {
           url: 'https://cronos-testnet-3.crypto.org:8545/',
           accounts: [dev],

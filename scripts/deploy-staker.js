@@ -1,7 +1,8 @@
 const { ethers } = require('hardhat');
 const chainsInfo = {
     '338':{
-      'dxp':'',
+      'dxp':'0x4FD2c40c25Dd40e9Bf0CE8479bA384178b8671b5',
+      'privateSaleLockerAddress':'0x8a340F39A468C2FcBFFf2122446a9A0745A313Ad',
       'isTestnet':true
     },
     '1337':{
@@ -9,18 +10,21 @@ const chainsInfo = {
       'isTestnet':true
     },
     '25':{
-      'dxp':'',
+      'dxp':'0xe0c41FF9a7032de445771E12C14868CbE061C993',
+      'privateSaleLockerAddress':'0x2EC4e8617AB86C05CB0Be6E303BB71eBaeDf0C3E',
       'isTestnet':false
    }
   }
 // Deploy function
 async function deploy() {
 
-   const ppMultiplier = 10000;
+   const ppMultiplier = 10000000;
    [deployer] = await ethers.getSigners();
    deployerAddress = deployer.address;
    const { provider } = deployer
    const chainId = (await provider.getNetwork()).chainId;
+   const privateSaleMultiplier = 1;
+   var privateSaleLockerAddress = chainsInfo[chainId].privateSaleLockerAddress;
    var chainInfo = chainsInfo[chainId];
    const startTime = (await provider.getBlock()).timestamp;
    const endTime = startTime + (1000);
@@ -28,16 +32,22 @@ async function deploy() {
 
    var tokenAddress =chainInfo.dxp;
 
-   if(chainInfo.isTestnet && tokenAddress === ''){
+   if(tokenAddress === ''){
         const StandardToken = await ethers.getContractFactory('StandardToken');
         const token = await StandardToken.deploy(deployerAddress, "Xpad Token","XPAD", 18, '100000000000000000000000');
         await token.deployed();
         console.log(`Deployed token at ${token.address}`);
         tokenAddress = token.address;
    }
+   if(privateSaleLockerAddress === ''){
+        const PrivateSaleLocker = await ethers.getContractFactory('MockTokenLocker');
+        const privateSaleLocker = await PrivateSaleLocker.deploy();
+        privateSaleLockerAddress = privateSaleLocker.address;
+        console.log(`Deployed mock privateSaleLocker at ${privateSaleLockerAddress}`);
+   }
    // Deploy the contracts
     const StakingHelper = await ethers.getContractFactory("StakingHelper");
-    stakingHelper = await StakingHelper.deploy(startTime,endTime, tokenAddress, ppMultiplier);
+    stakingHelper = await StakingHelper.deploy(startTime,endTime, tokenAddress, ppMultiplier, privateSaleMultiplier, privateSaleLockerAddress);
     await stakingHelper.deployed();
     console.log(`StakingHelper deployed at ${stakingHelper.address}`);
 

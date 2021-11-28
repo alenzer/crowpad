@@ -11,27 +11,31 @@ import "./ReentrancyGuard.sol";
 import "./IERC20.sol";
 
 interface IMigrator {
-    function migrate(address token, uint256 sharesDeposited, uint256 sharesWithdrawn, uint256 startEmission, uint256 endEmission, uint256 lockID, address owner, uint256 amountInTokens, uint256 option) external returns (bool);
+    function migrate(uint256 lockId, address owner, uint256 amount, uint256 ipp, uint256 unlockTime,  uint256 lockTime) external returns (bool);
 }
 
 contract BaseTierStakingContract is Ownable, ReentrancyGuard {
   using EnumerableSet for EnumerableSet.AddressSet;
   uint256 public CONTRACT_VERSION = 1;
+  
+  struct TokenLock{
+    uint256 lockId;
+    address owner;
+    uint256 amount;
+    uint256 iPP; // individual pool percentage
+    uint256 unlockTime;
+    uint256 lockTime;
+  }
   struct Config{
     uint8 tierId; //0 based index
     uint8 multiplier; // in 10 to support single decimal such as 0.1 and 1.2
     uint8 emergencyWithdrawlFee; // in 1000 so for 2% fee it will be 20
     uint8 enableEarlyWithdrawal;
-    uint256 unlockTime; // epoch timestamp
+    uint8 enableRewards;
+    uint256 unlockDuration; // epoch timestamp
     address depositor;  // Depositor contract who is allowed to stake
     address feeAddress; // Address to receive the fee
-  }
 
-  struct TokenLock{
-    uint256 lockID;
-    address owner;
-    uint256 amount;
-    uint256 iPP; // individual pool percentage
   }
 
   struct LockParams {
@@ -39,32 +43,34 @@ contract BaseTierStakingContract is Ownable, ReentrancyGuard {
     uint256 amount; // amount of tokens to lock
   }
 
+  EnumerableSet.AddressSet private USERS; 
   uint256 public tierTotalParticipationPoints;
   uint256 public NONCE = 1; // incremental lock nonce counter, this is the unique ID for the next lock
-  uint256 public MINIMUM_DEPOSIT = 100; // minimum divisibility per lock at time of locking
+  uint256 public MINIMUM_DEPOSIT = 1000* (10 ** 18); // minimum divisibility per lock at time of locking
   address public tokenAddress; // the token address
 
   Config public CONFIG;
-  mapping(uint256 => TokenLock) public LOCKS; // map lockID nonce to the lock
-  mapping(address => uint256) public USER_LOCKS; // UserAddress=> LockId
+  mapping(uint256 => TokenLock) public LOCKS; // map lockId nonce to the lock
+  mapping(address => uint256[]) public USER_LOCKS; // UserAddress=> LockId
   
   IMigrator public MIGRATOR;
-  event onLock(uint256 lockID, address owner, uint256 amountInTokens, uint256 iPP);
-  event onLockUpdated(uint256 lockID, address owner, uint256 amountInTokens, uint256 tierId);
-  event onWithdraw(uint256 lockID, address owner, uint256 amountInTokens);
-  event onFeeCharged(uint256 lockID, address owner, uint256 amountInTokens);
-  event onMigrate(uint256 lockID, uint256 amountInTokens);
+  event onLock(uint256 lockId, address owner, uint256 amountInTokens, uint256 iPP);
+  event onLockUpdated(uint256 lockId, address owner, uint256 amountInTokens, uint256 tierId);
+  event onWithdraw(uint256 lockId, address owner, uint256 amountInTokens);
+  event onFeeCharged(uint256 lockId, address owner, uint256 amountInTokens);
+  event onMigrate(uint256 lockId, uint256 amountInTokens);
 
   
-  constructor (uint8 tierId, uint8 multiplier, uint8 emergencyWithdrawlFee, uint8 enableEarlyWithdrawal, uint256 unlockTime,  address _depositor, address _tokenAddress, address _feeAddress) {
+  constructor (uint8 tierId, uint8 multiplier, uint8 emergencyWithdrawlFee, uint8 enableEarlyWithdrawal, uint256 unlockDuration, uint8 enableRewards, address _depositor, address _tokenAddress, address _feeAddress) {
     tokenAddress = _tokenAddress;
     CONFIG.tierId = tierId;
     CONFIG.multiplier = multiplier;
     CONFIG.emergencyWithdrawlFee = emergencyWithdrawlFee;
-    CONFIG.unlockTime = unlockTime;
+    CONFIG.unlockDuration = unlockDuration;
     CONFIG.enableEarlyWithdrawal = enableEarlyWithdrawal;
     CONFIG.depositor = _depositor;
     CONFIG.feeAddress = _feeAddress;
+    CONFIG.enableRewards = enableRewards;
   }
   
 
@@ -108,28 +114,20 @@ contract BaseTierStakingContract is Ownable, ReentrancyGuard {
     for (uint256 i = 0; i < _lock_params.length; i++) {
         LockParams memory lock_param = _lock_params[i];
         require(lock_param.amount >= MINIMUM_DEPOSIT, 'MIN DEPOSIT');
-        if(USER_LOCKS[lock_param.owner] == 0){
-            TokenLock memory token_lock;
-            token_lock.lockID = NONCE;
-            token_lock.owner = lock_param.owner;
-            token_lock.amount = lock_param.amount;
-            token_lock.iPP = lock_param.amount * CONFIG.multiplier;
-            // record the lock globally
-            LOCKS[NONCE] = token_lock;
-            tierTotalParticipationPoints += token_lock.iPP;
-            USER_LOCKS[token_lock.owner] = token_lock.lockID;
-            NONCE ++;
-            emit onLock(token_lock.lockID, token_lock.owner, token_lock.amount, token_lock.iPP);
-        }else{
-            TokenLock memory token_lock = LOCKS[USER_LOCKS[lock_param.owner]];
-            token_lock.amount += lock_param.amount;
-            tierTotalParticipationPoints -= token_lock.iPP;
-            token_lock.iPP += lock_param.amount * CONFIG.multiplier;
-            tierTotalParticipationPoints += token_lock.iPP;
-            LOCKS[USER_LOCKS[lock_param.owner]] = token_lock;
-            emit onLockUpdated(token_lock.lockID, token_lock.owner, lock_param.amount, token_lock.iPP);
-        }
-
+        TokenLock memory token_lock;
+        token_lock.lockId = NONCE;
+        token_lock.owner = lock_param.owner;
+        USERS.add(lock_param.owner);
+        token_lock.amount = lock_param.amount;
+        token_lock.lockTime = block.timestamp;
+        token_lock.unlockTime = block.timestamp + CONFIG.unlockDuration;
+        token_lock.iPP = lock_param.amount * CONFIG.multiplier;
+        // record the lock globally
+        LOCKS[NONCE] = token_lock;
+        tierTotalParticipationPoints += token_lock.iPP;
+        USER_LOCKS[token_lock.owner].push(token_lock.lockId);
+        NONCE ++;
+        emit onLock(token_lock.lockId, token_lock.owner, token_lock.amount, token_lock.iPP);
     }
   }
   /**
@@ -148,70 +146,88 @@ contract BaseTierStakingContract is Ownable, ReentrancyGuard {
    * @notice withdraw a specified amount from a lock. _amount is the ideal amount to be withdrawn.
    * however, this amount might be slightly different in rebasing tokens due to the conversion to shares,
    * then back into an amount
-   * @param _lockID the lockID of the lock to be withdrawn
+   * @param _lockId the lockId of the lock to be withdrawn
    */
-  function withdraw ( uint256 _lockID) external nonReentrant {
-    require(CONFIG.enableEarlyWithdrawal == 1, 'Early withdrawal is disabled');
-    TokenLock storage userLock = LOCKS[_lockID];
+  function withdraw ( uint256 _lockId, uint256 _index, uint256 _amount) external nonReentrant {
+    TokenLock storage userLock = LOCKS[_lockId];
+    require(userLock.unlockTime <= block.timestamp ||  CONFIG.enableEarlyWithdrawal == 1, 'Early withdrawal is disabled');
+    
+    require(USER_LOCKS[msg.sender].length > _index, 'Index OOB');
+    require(USER_LOCKS[msg.sender][_index] == _lockId, 'lockId NOT MATCHED');
     require(userLock.owner == msg.sender, 'OWNER');
     uint256 balance = IERC20(tokenAddress).balanceOf(address(this));
-    uint256 withdrawableAmount = LOCKS[USER_LOCKS[msg.sender]].amount;
+    uint256 withdrawableAmount = LOCKS[_lockId].amount;
     require(withdrawableAmount > 0, 'NO TOKENS');
-    require(withdrawableAmount <= balance, 'NOT ENOUGH TOKENS');
-    LOCKS[USER_LOCKS[msg.sender]].amount = 0;
-    tierTotalParticipationPoints -= userLock.iPP;
-    LOCKS[USER_LOCKS[msg.sender]].iPP = 0;
-    if(CONFIG.unlockTime> block.timestamp && CONFIG.emergencyWithdrawlFee>0){
-      uint256 fee = FullMath.mulDiv(withdrawableAmount,CONFIG.emergencyWithdrawlFee , 1000);
+    require(_amount <= withdrawableAmount, 'AMOUNT<WAMNT');
+    require(_amount <= balance, 'NOT ENOUGH TOKENS');
+    LOCKS[_lockId].amount = withdrawableAmount-_amount;
+    uint256 decreaseIPP = _amount * CONFIG.multiplier;
+    tierTotalParticipationPoints -= decreaseIPP;
+    LOCKS[_lockId].iPP -= decreaseIPP;
+    if(userLock.unlockTime> block.timestamp && CONFIG.emergencyWithdrawlFee>0){
+      uint256 fee = FullMath.mulDiv(_amount,CONFIG.emergencyWithdrawlFee , 1000);
       TransferHelper.safeTransfer(tokenAddress, CONFIG.feeAddress, fee);
-      withdrawableAmount = withdrawableAmount - fee;
-      emit onFeeCharged(_lockID, msg.sender, fee);
+      _amount = _amount - fee;
+      emit onFeeCharged(_lockId, msg.sender, fee);
     }
-    TransferHelper.safeTransfer(tokenAddress, msg.sender, withdrawableAmount);
-    emit onWithdraw(_lockID, msg.sender, withdrawableAmount);
+    TransferHelper.safeTransfer(tokenAddress, msg.sender, _amount);
+    emit onWithdraw(_lockId, msg.sender, _amount);
   }
-  // function changeConfig( uint8 tierId, uint8 multiplier, uint8 emergencyWithdrawlFee, uint8 enableEarlyWithdrawal, uint256 unlockTime, address depositor, address feeAddress)  external onlyOwner returns(bool) {
-  //   CONFIG.tierId = tierId;
-  //   CONFIG.multiplier = multiplier;
-  //   CONFIG.emergencyWithdrawlFee = emergencyWithdrawlFee;
-  //   CONFIG.enableEarlyWithdrawal = enableEarlyWithdrawal;
-  //   CONFIG.unlockTime = unlockTime;
-  //   CONFIG.depositor = depositor;
-  //   CONFIG.feeAddress = feeAddress;
-  //   return true;
-  // }
+  function changeConfig( uint8 tierId, uint8 multiplier, uint8 emergencyWithdrawlFee, uint8 enableEarlyWithdrawal, uint256 unlockDuration, uint8 enableRewards, address depositor, address feeAddress)  external onlyOwner returns(bool) {
+    CONFIG.tierId = tierId;
+    CONFIG.multiplier = multiplier;
+    CONFIG.emergencyWithdrawlFee = emergencyWithdrawlFee;
+    CONFIG.enableEarlyWithdrawal = enableEarlyWithdrawal;
+    CONFIG.unlockDuration = unlockDuration;
+    CONFIG.depositor = depositor;
+    CONFIG.feeAddress = feeAddress;
+    CONFIG.enableRewards = enableRewards;
+    return true;
+  }
   
   function setDepositor(address _depositor) external onlyOwner {
     CONFIG.depositor = _depositor;
   }
   function getPoolPercentagesWithUser(address _user) external view returns(uint256, uint256){
-    uint256 userLockID = USER_LOCKS[_user];
-    if(userLockID == 0){
-      return (0, tierTotalParticipationPoints);
-    }
-    TokenLock memory userLock = LOCKS[userLockID];
-    return (userLock.iPP, tierTotalParticipationPoints);
+    return _getPoolPercentagesWithUser(_user);
   }
-  // /**
-  //  * @notice migrates to the next locker version, only callable by lock owners
-  //  */
-  // function migrate (uint256 _lockID) external nonReentrant {
-  //   require(address(MIGRATOR) != address(0), "NOT SET");
-  //   TokenLock storage userLock = LOCKS[_lockID];
-  //   require(userLock.owner == msg.sender, 'OWNER');
-  //   uint256 sharesAvailable = userLock.sharesDeposited - userLock.sharesWithdrawn;
-  //   require(sharesAvailable > 0, 'AMOUNT');
 
-  //   uint256 balance = IERC20(userLock.tokenAddress).balanceOf(address(this));
-  //   uint256 amountInTokens = FullMath.mulDiv(sharesAvailable, balance, SHARES[userLock.tokenAddress]);
+  function _getPoolPercentagesWithUser(address _user) internal view returns(uint256, uint256){
+    uint256 userLockIPP = 0;
+    for(uint256 i = 0; i<USER_LOCKS[_user].length; i++){
+      TokenLock storage userLock = LOCKS[USER_LOCKS[_user][i]];
+      userLockIPP += userLock.iPP;
+    }
+    return (userLockIPP, tierTotalParticipationPoints);
+  }
+  /**
+   * @notice migrates to the next locker version, only callable by lock owners
+   */
+  function migrate (uint256 _lockId) external nonReentrant {
+    require(address(MIGRATOR) != address(0), "NOT SET");
+    TokenLock storage userLock = LOCKS[_lockId];
+    require(userLock.owner == msg.sender, 'OWNER');
+    uint256 amount = userLock.amount;
+    require(amount > 0, 'AMOUNT');
+
+    uint256 balance = IERC20(tokenAddress).balanceOf(address(this));
+    require(amount <= balance, 'NOT ENOUGH TOKENS');
+    TransferHelper.safeApprove(tokenAddress, address(MIGRATOR), amount);
+    MIGRATOR.migrate(userLock.lockId, userLock.owner, userLock.amount, userLock.iPP, userLock.unlockTime,userLock.lockTime);
     
-  //   TransferHelper.safeApprove(userLock.tokenAddress, address(MIGRATOR), amountInTokens);
-  //   MIGRATOR.migrate(userLock.tokenAddress, userLock.sharesDeposited, userLock.sharesWithdrawn, userLock.startEmission,
-  //   userLock.endEmission, userLock.lockID, userLock.owner,  amountInTokens, _option);
-    
-  //   userLock.sharesWithdrawn = userLock.sharesDeposited;
-  //   SHARES[userLock.tokenAddress] -= sharesAvailable;
-  //   emit onMigrate(_lockID, amountInTokens);
-  // }
+    userLock.amount = 0;
+    emit onMigrate(_lockId, amount);
+  }
+
+  function getLockedUsersLength() external view returns(uint256){
+    return USERS.length();
+  }
+  function getLockedUserAt(uint256 _index) external view returns(address){
+    return USERS.at(_index);
+  }
+
+  function getUserLocksLength(address _user) external view returns(uint256){
+    return USER_LOCKS[_user].length;
+  }
   
 }

@@ -7,22 +7,28 @@ chai.use(solidity);
 
 const expect = chai.expect;
 describe("StakingHelper", async () =>  {
-    let deployerAddress, anotherUser1, flexTier, stakingHelper, standardToken, deployer, ppMultiplier;
+    let deployerAddress, anotherUser1, flexTier, stakingHelper, standardToken, 
+    deployer, ppMultiplier, privateSaleMultiplier, privateSaleLockerAddress;
 
 beforeEach(async () =>  {
     const [owner, user1] = await ethers.getSigners();
     deployer = owner;
     anotherUser1 = user1;
     ppMultiplier = 10000;
+    privateSaleMultiplier = 1;
     const Token = await ethers.getContractFactory("StandardToken");
     const startTime = (await deployer.provider.getBlock()).timestamp;
     const endTime = startTime + (1000);
     standardToken = await Token.deploy(owner.address, "Demo Token","DT",18,1000000);
     await standardToken.deployed();
+    
+    const PrivateSaleLocker = await ethers.getContractFactory("MockTokenLocker");
+    const privateSaleLocker = await PrivateSaleLocker.deploy();
+    privateSaleLockerAddress = privateSaleLocker.address;
     deployerAddress = owner.address;
 
     const StakingHelper = await ethers.getContractFactory("StakingHelper");
-    stakingHelper = await StakingHelper.deploy(startTime,endTime, standardToken.address, ppMultiplier);
+    stakingHelper = await StakingHelper.deploy(startTime,endTime, standardToken.address, ppMultiplier, privateSaleMultiplier, privateSaleLockerAddress);
     await stakingHelper.deployed();
     const FlexTierStakingContract = await ethers.getContractFactory('FlexTierStakingContract');
     flexTier = await FlexTierStakingContract.deploy(stakingHelper.address, standardToken.address,deployerAddress);
@@ -79,18 +85,18 @@ beforeEach(async () =>  {
         await expect(() => stakingHelper.stake(anotherUser1.address,200,0)).to.changeTokenBalance(standardToken,deployer,-200);
         await expect(() => stakingHelper.stake(anotherUser1.address,100,0)).to.changeTokenBalance(standardToken,deployer,-100);
         await expect(() => stakingHelper.stake(deployerAddress,100,0)).to.changeTokenBalance(standardToken,deployer,-100);
-        const lockId = flexTier.USER_LOCKS(anotherUser1.address);
-        await expect(() => flexTier.connect(anotherUser1).withdraw(lockId)).to.changeTokenBalance(standardToken,anotherUser1,+300);
+        const lockId = flexTier.USER_LOCKS(anotherUser1.address,0);
+        await expect(() => flexTier.connect(anotherUser1).withdraw(lockId,0,200)).to.changeTokenBalance(standardToken,anotherUser1,+200);
         const result1 = await flexTier.getPoolPercentagesWithUser(deployerAddress);
         const result2 = await flexTier.getPoolPercentagesWithUser(anotherUser1.address);
         const result3 = await stakingHelper.getUserSPP(deployerAddress);
         const result4 = await stakingHelper.getUserSPP(anotherUser1.address);
         expect(result1[0].toString()).to.equal('1000');
-        expect(result1[1].toString()).to.equal('1000');
-        expect(result2[0].toString()).to.equal('0');
-        expect(result2[1].toString()).to.equal('1000');
-        expect(result3.toString()).to.equal(ppMultiplier.toString());
-        expect(result4.toString()).to.equal('0');
+        expect(result1[1].toString()).to.equal('2000');
+        expect(result2[0].toString()).to.equal('1000');
+        expect(result2[1].toString()).to.equal('2000');
+        expect(result3.toString()).to.equal((ppMultiplier/2).toString());
+        expect(result4.toString()).to.equal((ppMultiplier/2).toString());
     });
   })
 });

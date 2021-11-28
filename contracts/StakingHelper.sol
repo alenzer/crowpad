@@ -9,13 +9,16 @@ import "./ReentrancyGuard.sol";
 import "./EnumerableSet.sol";
 import "./Ownable.sol";
 import "./IERC20.sol";
+import "./Pausable.sol";
+
 
 interface IStakingTierContract{
     function singleLock (address payable _owner, uint256 _amount) external ;
     function getPoolPercentagesWithUser(address _user) external view returns(uint256, uint256);
 }
-interface IPrivateSaleTokenLockerContract{
-    function getWithdrawableTokens (uint256 _lockID) external view returns (uint256);
+interface ITokenLocker{
+    function convertSharesToTokens (address _token, uint256 _shares) external view returns (uint256) ;
+    function LOCKS(uint256 lockId) external view returns(address,uint256,uint256,uint256,uint256,uint256,address,string memory);
 }
 
 contract StakingHelper is Ownable, ReentrancyGuard{
@@ -29,9 +32,10 @@ contract StakingHelper is Ownable, ReentrancyGuard{
     }
 
     address[] public stakingTierAddresses;
-    mapping(address => uint16[]) public privateSaleUserLockerIds;
-    uint16[] public privateSaleLockerIds;
+    mapping(address => uint256[]) public privateSaleUserLockerIds;
+    uint256[] public privateSaleLockerIds;
     address public privateSaleLockerAddress;
+    ITokenLocker private tokenLocker;
     Settings public SETTINGS;
 
     constructor(uint256 _startTimeForDeposit, uint256 _endTimeForDeposit, address _tokenAddress, uint256 _ppMultiplier, uint256 _privateSaleMultiplier, address _privateSaleLockerAddress){
@@ -69,7 +73,7 @@ contract StakingHelper is Ownable, ReentrancyGuard{
             tierTotalPP += _tierPP;
         }
         for(uint256 i = 0; i < privateSaleUserLockerIds[_user].length; i++){
-            userTotalPP += IPrivateSaleTokenLockerContract(privateSaleLockerAddress).getWithdrawableTokens(privateSaleUserLockerIds[_user][i])*SETTINGS.privateSaleMultiplier;
+            userTotalPP += _getLockedPrivateSaleTokens(privateSaleUserLockerIds[_user][i])*SETTINGS.privateSaleMultiplier;
         }
         tierTotalPP += SETTINGS.privateSaleTotalPP;
         return FullMath.mulDiv(userTotalPP, SETTINGS.ppMultiplier, tierTotalPP);
@@ -90,23 +94,37 @@ contract StakingHelper is Ownable, ReentrancyGuard{
         IERC20(_token).transfer(_to, _amount);
     }
 
-    function setPrivateSaleLockerIds(uint16[] memory _privateSaleLockerIds, address[] memory _privateSaleLockerOwners) external onlyOwner{
+    function setPrivateSaleLockerIds(uint256[] memory _privateSaleLockerIds, address[] memory _privateSaleLockerOwners) external onlyOwner{
         require(_privateSaleLockerIds.length == _privateSaleLockerOwners.length, "Length Not Matched");
+        for(uint256 i = 0; i < _privateSaleLockerOwners.length; i++){
+            address owner = _privateSaleLockerOwners[i];
+            delete privateSaleUserLockerIds[owner];
+        }
         for(uint256 i = 0; i < _privateSaleLockerIds.length; i++){
-            privateSaleUserLockerIds[_privateSaleLockerOwners[i]][privateSaleUserLockerIds[_privateSaleLockerOwners[i]].length] = _privateSaleLockerIds[i];
+            address owner = _privateSaleLockerOwners[i];
+            uint256 lockId = _privateSaleLockerIds[i];
+
+            privateSaleUserLockerIds[owner].push( lockId);
         }
         privateSaleLockerIds = _privateSaleLockerIds;
     }
     function updatePrivateSaleTotalPP(uint256 _privateSaleTotalPP) external onlyOwner{
         SETTINGS.privateSaleTotalPP = _privateSaleTotalPP;
     }
-
+    function getLockedPrivateSaleTokens(uint256 lockerId) external view returns (uint256){
+        return _getLockedPrivateSaleTokens(lockerId);
+    }
+    function _getLockedPrivateSaleTokens(uint256 lockerId) internal view returns (uint256){
+        (,uint256 sharesDeposited,uint256 sharesWithdrawn,,,,,) = tokenLocker.LOCKS(lockerId);
+       return tokenLocker.convertSharesToTokens(SETTINGS.tokenAddress,sharesDeposited - sharesWithdrawn); 
+    }
     function updatePrivateSaleTotalPPFromContract() external onlyOwner{
         uint256 privateSaleTotalPP = 0;
-        for(uint16 i = 0; i < privateSaleLockerIds.length; i++){
-            privateSaleTotalPP += IPrivateSaleTokenLockerContract(privateSaleLockerAddress).getWithdrawableTokens(privateSaleLockerIds[i])*SETTINGS.privateSaleMultiplier;
+        for(uint256 i = 0; i < privateSaleLockerIds.length; i++){
+            privateSaleTotalPP += (_getLockedPrivateSaleTokens(privateSaleLockerIds[i])*SETTINGS.privateSaleMultiplier);
         }
         SETTINGS.privateSaleTotalPP = privateSaleTotalPP;
     }
 
 }
+

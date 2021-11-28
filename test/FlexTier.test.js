@@ -79,8 +79,10 @@ beforeEach(async () =>  {
         await expect(() => flexTier.singleLock(anotherUser1.address,200)).to.changeTokenBalance(standardToken,deployer,-200);
         await expect(() => flexTier.singleLock(anotherUser1.address,100)).to.changeTokenBalance(standardToken,deployer,-100);
         await expect(() => flexTier.singleLock(deployerAddress,100)).to.changeTokenBalance(standardToken,deployer,-100);
-        const lockId = flexTier.USER_LOCKS(anotherUser1.address);
-        await expect(() => flexTier.connect(anotherUser1).withdraw(lockId)).to.changeTokenBalance(standardToken,anotherUser1,+300);
+        const lockId1 = flexTier.USER_LOCKS(anotherUser1.address,0);
+        const lockId2 = flexTier.USER_LOCKS(anotherUser1.address,1);
+        await expect(() => flexTier.connect(anotherUser1).withdraw(lockId1,0,200)).to.changeTokenBalance(standardToken,anotherUser1,+200);
+        await expect(() => flexTier.connect(anotherUser1).withdraw(lockId2,1,100)).to.changeTokenBalance(standardToken,anotherUser1,+100);
         const result1 = await flexTier.getPoolPercentagesWithUser(deployerAddress);
         const result2 = await flexTier.getPoolPercentagesWithUser(anotherUser1.address);
         expect(result1[0].toString()).to.equal('1000');
