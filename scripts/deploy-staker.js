@@ -1,7 +1,7 @@
 const { ethers } = require('hardhat');
 const chainsInfo = {
     '338':{
-      'dxp':'0x4FD2c40c25Dd40e9Bf0CE8479bA384178b8671b5',
+      'dxp':'',
       'privateSaleLockerAddress':'0x8a340F39A468C2FcBFFf2122446a9A0745A313Ad',
       'isTestnet':true
     },
@@ -27,14 +27,14 @@ async function deploy() {
    var privateSaleLockerAddress = chainsInfo[chainId].privateSaleLockerAddress;
    var chainInfo = chainsInfo[chainId];
    const startTime = (await provider.getBlock()).timestamp;
-   const endTime = startTime + (1000);
+   const endTime = startTime + (365*24*60*60);
    console.log(`Deploying contracts using ${deployerAddress}`);
 
    var tokenAddress =chainInfo.dxp;
 
    if(tokenAddress === ''){
         const StandardToken = await ethers.getContractFactory('StandardToken');
-        const token = await StandardToken.deploy(deployerAddress, "Xpad Token","XPAD", 18, '100000000000000000000000');
+        const token = await StandardToken.deploy(deployerAddress, "Xpad Token","XPAD", 18, '100000000000000000000000000');
         await token.deployed();
         console.log(`Deployed token at ${token.address}`);
         tokenAddress = token.address;
