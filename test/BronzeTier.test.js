@@ -1,11 +1,19 @@
 
-const { ethers } = require("hardhat");
+const { ethers,timeAndMine } = require("hardhat");
 const chai = require('chai');
+const { BigNumber } = require('@ethersproject/bignumber')
 const {solidity} = require('ethereum-waffle');
 
 chai.use(solidity);
 
 const expect = chai.expect;
+function getEthers(inputEther) {
+    return BigNumber.from(ethers.utils.parseEther(inputEther))
+}
+function getNegativeEthers(inputEther) {
+    return BigNumber.from(ethers.utils.parseEther(inputEther)).mul(BigNumber.from(-1))
+}
+
 describe("BronzeTierStakingContract", async () =>  {
     let deployerAddress,anotherUser1, bronzeTier, standardToken, deployer;
 
@@ -48,13 +56,13 @@ beforeEach(async () =>  {
       });
     it("should be successful for single lock with more than 1000 TOKENS", async () => {
       await standardToken.approve(bronzeTier.address,ethers.utils.parseEther('1000'));
-      await expect(() => bronzeTier.singleLock(deployerAddress,ethers.utils.parseEther('1000'))).to.changeTokenBalance(standardToken,deployer,-101);
+      await expect(() => bronzeTier.singleLock(deployerAddress,ethers.utils.parseEther('1000'))).to.changeTokenBalance(standardToken,deployer, getNegativeEthers('1000'));
     });
 
     it("should be successful for single lock and it should same iPP for both users with sum to be matched", async () => {
         await standardToken.approve(bronzeTier.address,ethers.utils.parseEther('3000'));
-        await expect(() => bronzeTier.singleLock(anotherUser1.address,ethers.utils.parseEther('2000'))).to.changeTokenBalance(standardToken,deployer,-1* ethers.utils.parseEther('2000'));
-        await expect(() => bronzeTier.singleLock(deployerAddress,ethers.utils.parseEther('1000'))).to.changeTokenBalance(standardToken,deployer,-1* ethers.utils.parseEther('1000'));
+        await expect(() => bronzeTier.singleLock(anotherUser1.address,ethers.utils.parseEther('2000'))).to.changeTokenBalance(standardToken,deployer,getNegativeEthers('2000'));
+        await expect(() => bronzeTier.singleLock(deployerAddress,ethers.utils.parseEther('1000'))).to.changeTokenBalance(standardToken,deployer,getNegativeEthers('1000'));
         const result1 = await bronzeTier.getPoolPercentagesWithUser(anotherUser1.address);
         const result2 = await bronzeTier.getPoolPercentagesWithUser(deployerAddress);
         
@@ -65,33 +73,66 @@ beforeEach(async () =>  {
     });
 
     it("should calculate iPP correct for multiple staking by single user", async () => {
-        await standardToken.approve(bronzeTier.address,300);
-        await expect(() => bronzeTier.singleLock(anotherUser1.address,200)).to.changeTokenBalance(standardToken,deployer,-200);
-        await expect(() => bronzeTier.singleLock(anotherUser1.address,100)).to.changeTokenBalance(standardToken,deployer,-100);
+        await standardToken.approve(bronzeTier.address,getEthers('3000'));
+        await expect(() => bronzeTier.singleLock(anotherUser1.address,getEthers('2000'))).to.changeTokenBalance(standardToken,deployer,getNegativeEthers('2000'));
+        await expect(() => bronzeTier.singleLock(anotherUser1.address,getEthers('1000'))).to.changeTokenBalance(standardToken,deployer,getNegativeEthers('1000'));
         const result1 = await bronzeTier.getPoolPercentagesWithUser(anotherUser1.address);
         
-        expect(result1[0].toString()).to.equal('3600');
-        expect(result1[1].toString()).to.equal('3600');
+        expect(result1[0].toString()).to.equal(ethers.utils.parseEther('36000'));
+        expect(result1[1].toString()).to.equal(ethers.utils.parseEther('36000'));
     });
-
-    it("should calculate iPP correct for multiple staking by single user and then withdrawl", async () => {
-      await standardToken.approve(bronzeTier.address,400);
-      await expect(() => bronzeTier.singleLock(anotherUser1.address,200)).to.changeTokenBalance(standardToken,deployer,-200);
-      await expect(() => bronzeTier.singleLock(anotherUser1.address,100)).to.changeTokenBalance(standardToken,deployer,-100);
-      await expect(() => bronzeTier.singleLock(deployerAddress,100)).to.changeTokenBalance(standardToken,deployer,-100);
+    it("should fail for withdrawl if its done before unlock duration", async () => {
+        await standardToken.approve(bronzeTier.address,ethers.utils.parseEther('3000'));
+        await expect(() => bronzeTier.singleLock(anotherUser1.address,ethers.utils.parseEther('2000'))).to.changeTokenBalance(standardToken,deployer,getNegativeEthers('2000'));
+        await expect(() => bronzeTier.singleLock(deployerAddress,ethers.utils.parseEther('1000'))).to.changeTokenBalance(standardToken,deployer,getNegativeEthers('1000'));
+        const result1 = await bronzeTier.getPoolPercentagesWithUser(anotherUser1.address);
+        const result2 = await bronzeTier.getPoolPercentagesWithUser(deployerAddress);
+        const lockId = bronzeTier.USER_LOCKS(anotherUser1.address,0);
+        expect(bronzeTier.connect(anotherUser1).withdraw(lockId,0,getEthers('100'))).to.be.revertedWith('Early withdrawal is disabled');
+        expect(result1[0].toString()).to.equal( ethers.utils.parseEther('24000'));
+        expect(result1[1].toString()).to.equal(ethers.utils.parseEther('36000'));
+        expect(result2[0].toString()).to.equal(ethers.utils.parseEther('12000'));
+        expect(result2[1].toString()).to.equal(ethers.utils.parseEther('36000'));
+     });
+    it("should calculate iPP correct for multiple staking by single user and then withdrawl after unlock duration", async () => {
+     //const config = await bronzeTier.CONFIG();
+      //console.log(config.tierId, config.multiplier, config.emergencyWithdrawlFee,1,config.unlockDuration, config.depositor, config.feeAddress,config.enableRewards);
+      await bronzeTier.changeUnlockDuration(1);
+      await standardToken.approve(bronzeTier.address,getEthers('4000'));
+      await expect(() => bronzeTier.singleLock(anotherUser1.address,getEthers('2000'))).to.changeTokenBalance(standardToken,deployer,getNegativeEthers('2000'));
+      await expect(() => bronzeTier.singleLock(anotherUser1.address,getEthers('1000'))).to.changeTokenBalance(standardToken,deployer,getNegativeEthers('1000'));
+      await expect(() => bronzeTier.singleLock(deployerAddress,getEthers('1000'))).to.changeTokenBalance(standardToken,deployer,getNegativeEthers('1000'));
       const lockId = bronzeTier.USER_LOCKS(anotherUser1.address,0);
       const lockId2 = bronzeTier.USER_LOCKS(anotherUser1.address,1);
-      const withdrawlFee = await bronzeTier.emergencyWithdrawlFee();
-      await expect(() => bronzeTier.connect(anotherUser1).withdraw(lockId,0,10)).to.changeTokenBalance(standardToken,anotherUser1,+(Math.ceil(10* (1-(withdrawlFee/1000)))));
-      await expect(() => bronzeTier.connect(anotherUser1).withdraw(lockId,0,5)).to.changeTokenBalance(standardToken,anotherUser1,+(Math.ceil(5* (1-(withdrawlFee/1000)))));
-      await expect(() => bronzeTier.connect(anotherUser1).withdraw(lockId,0,184)).to.changeTokenBalance(standardToken,anotherUser1,+(Math.ceil(184* (1-(withdrawlFee/1000)))));
-      await expect(() => bronzeTier.connect(anotherUser1).withdraw(lockId2,1,100)).to.changeTokenBalance(standardToken,anotherUser1,+(Math.ceil(100* (1-(withdrawlFee/1000)))));
+      await expect(() => bronzeTier.connect(anotherUser1).withdraw(lockId,0,getEthers('100'))).to.changeTokenBalance(standardToken,anotherUser1,(getEthers('100')));
+      await expect(() => bronzeTier.connect(anotherUser1).withdraw(lockId,0,getEthers('50'))).to.changeTokenBalance(standardToken,anotherUser1,(getEthers('50')));
+      await expect(() => bronzeTier.connect(anotherUser1).withdraw(lockId,0,getEthers('1840'))).to.changeTokenBalance(standardToken,anotherUser1,(getEthers('1840')));
+      await expect(() => bronzeTier.connect(anotherUser1).withdraw(lockId2,1,getEthers('1000'))).to.changeTokenBalance(standardToken,anotherUser1,(getEthers('1000')));
       const result1 = await bronzeTier.getPoolPercentagesWithUser(deployerAddress);
       const result2 = await bronzeTier.getPoolPercentagesWithUser(anotherUser1.address);
-      expect(result1[0].toString()).to.equal('1200');
-      expect(result1[1].toString()).to.equal('1212');
-      expect(result2[0].toString()).to.equal('12');
-      expect(result2[1].toString()).to.equal('1212');
+      expect(result1[0].toString()).to.equal(getEthers('12000'));
+      expect(result1[1].toString()).to.equal(getEthers('12120'));
+      expect(result2[0].toString()).to.equal(getEthers('120'));
+      expect(result2[1].toString()).to.equal(getEthers('12120'));
+    });
+    it("should calculate iPP correct for multiple staking by single user and then withdrawl", async () => {
+      await bronzeTier.changeEarlyWithdrawl(1);
+      await standardToken.approve(bronzeTier.address,getEthers('4000'));
+      await expect(() => bronzeTier.singleLock(anotherUser1.address,getEthers('2000'))).to.changeTokenBalance(standardToken,deployer,getNegativeEthers('2000'));
+      await expect(() => bronzeTier.singleLock(anotherUser1.address,getEthers('1000'))).to.changeTokenBalance(standardToken,deployer,getNegativeEthers('1000'));
+      await expect(() => bronzeTier.singleLock(deployerAddress,getEthers('1000'))).to.changeTokenBalance(standardToken,deployer,getNegativeEthers('1000'));
+      const lockId = bronzeTier.USER_LOCKS(anotherUser1.address,0);
+      const lockId2 = bronzeTier.USER_LOCKS(anotherUser1.address,1);
+      await expect(() => bronzeTier.connect(anotherUser1).withdraw(lockId,0,getEthers('100'))).to.changeTokenBalance(standardToken,anotherUser1,(getEthers('98.8')));
+      await expect(() => bronzeTier.connect(anotherUser1).withdraw(lockId,0,getEthers('50'))).to.changeTokenBalance(standardToken,anotherUser1,(getEthers('49.4')));
+      await expect(() => bronzeTier.connect(anotherUser1).withdraw(lockId,0,getEthers('1840'))).to.changeTokenBalance(standardToken,anotherUser1,(getEthers('1817.92')));
+      await expect(() => bronzeTier.connect(anotherUser1).withdraw(lockId2,1,getEthers('1000'))).to.changeTokenBalance(standardToken,anotherUser1,(getEthers('988')));
+      const result1 = await bronzeTier.getPoolPercentagesWithUser(deployerAddress);
+      const result2 = await bronzeTier.getPoolPercentagesWithUser(anotherUser1.address);
+      expect(result1[0].toString()).to.equal(getEthers('12000'));
+      expect(result1[1].toString()).to.equal(getEthers('12120'));
+      expect(result2[0].toString()).to.equal(getEthers('120'));
+      expect(result2[1].toString()).to.equal(getEthers('12120'));
   });
   })
 });

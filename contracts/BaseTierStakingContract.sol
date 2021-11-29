@@ -229,5 +229,11 @@ contract BaseTierStakingContract is Ownable, ReentrancyGuard {
   function getUserLocksLength(address _user) external view returns(uint256){
     return USER_LOCKS[_user].length;
   }
+  function changeEarlyWithdrawl(uint8 _enableEarlyWithdrawal) external onlyOwner {
+    CONFIG.enableEarlyWithdrawal = _enableEarlyWithdrawal;
+  }
+  function changeUnlockDuration(uint8 _unlockDuration) external onlyOwner {
+    CONFIG.unlockDuration = _unlockDuration;
+  }
   
 }
