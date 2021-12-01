@@ -21,7 +21,7 @@ interface ITokenLocker{
     function LOCKS(uint256 lockId) external view returns(address,uint256,uint256,uint256,uint256,uint256,address,string memory);
 }
 
-contract StakingHelper is Ownable, ReentrancyGuard{
+contract StakingHelper is Ownable, ReentrancyGuard, Pausable{
     struct Settings{
         uint256 startTimeForDeposit;
         uint256 endTimeForDeposit;
@@ -51,7 +51,7 @@ contract StakingHelper is Ownable, ReentrancyGuard{
        revert('No Direct Transfer');
     }
     
-    function stake(address payable _owner, uint256 _amount, uint8 _tierId) external nonReentrant {
+    function stake(address payable _owner, uint256 _amount, uint8 _tierId) external nonReentrant notPaused {
         require(_tierId < stakingTierAddresses.length, "TierId is out of range");
         require(_depositEnabled(),"Deposit is not enabled");
         require(_owner!=address(0), 'No ADDR');

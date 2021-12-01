@@ -3,7 +3,8 @@ const chainsInfo = {
     '338':{
       'dxp':'',
       'privateSaleLockerAddress':'0x8a340F39A468C2FcBFFf2122446a9A0745A313Ad',
-      'isTestnet':true
+      'stakingHelperAddress':'0x8a340F39A468C2FcBFFf2122446a9A0745A313Ad',
+      'isTestnet':true,
     },
     '1337':{
       'dxp':'',
@@ -12,6 +13,7 @@ const chainsInfo = {
     '25':{
       'dxp':'0xe0c41FF9a7032de445771E12C14868CbE061C993',
       'privateSaleLockerAddress':'0x2EC4e8617AB86C05CB0Be6E303BB71eBaeDf0C3E',
+      'stakingHelperAddress':'0x8a340F39A468C2FcBFFf2122446a9A0745A313Ad',
       'isTestnet':false
    }
   }

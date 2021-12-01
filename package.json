@@ -8,6 +8,7 @@
     "compile": "npx hardhat compile",
     "clean": "npx hardhat clean",
     "start": "npx hardhat run scripts/deploy-staker.js",
+    "deploy:migrator": "npx hardhat run scripts/deploy-migrator.js",
     "lint:sol": "solhint -f table contracts/**/*.sol"
   },
   "dependencies": {

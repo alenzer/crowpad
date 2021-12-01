@@ -14,7 +14,7 @@ interface IMigrator {
     function migrate(uint256 lockId, address owner, uint256 amount, uint256 ipp, uint256 unlockTime,  uint256 lockTime) external returns (bool);
 }
 
-contract BaseTierStakingContract is Ownable, ReentrancyGuard {
+contract BaseTierStakingContract is Ownable, ReentrancyGuard, IMigrator {
   using EnumerableSet for EnumerableSet.AddressSet;
   uint256 public CONTRACT_VERSION = 1;
   
@@ -35,7 +35,6 @@ contract BaseTierStakingContract is Ownable, ReentrancyGuard {
     uint256 unlockDuration; // epoch timestamp
     address depositor;  // Depositor contract who is allowed to stake
     address feeAddress; // Address to receive the fee
-
   }
 
   struct LockParams {
@@ -44,6 +43,7 @@ contract BaseTierStakingContract is Ownable, ReentrancyGuard {
   }
 
   EnumerableSet.AddressSet private USERS; 
+  EnumerableSet.AddressSet private allowedMigrators; // Address of the contract that can migrate the tokens
   uint256 public tierTotalParticipationPoints;
   uint256 public NONCE = 1; // incremental lock nonce counter, this is the unique ID for the next lock
   uint256 public MINIMUM_DEPOSIT = 1000* (10 ** 18); // minimum divisibility per lock at time of locking
@@ -58,7 +58,7 @@ contract BaseTierStakingContract is Ownable, ReentrancyGuard {
   event onLockUpdated(uint256 lockId, address owner, uint256 amountInTokens, uint256 tierId);
   event onWithdraw(uint256 lockId, address owner, uint256 amountInTokens);
   event onFeeCharged(uint256 lockId, address owner, uint256 amountInTokens);
-  event onMigrate(uint256 lockId, uint256 amountInTokens);
+  event onMigrate(uint256 lockId, address owner, uint256 amount, uint256 ipp, uint256 unlockTime,  uint256 lockTime);
 
   
   constructor (uint8 tierId, uint8 multiplier, uint8 emergencyWithdrawlFee, uint8 enableEarlyWithdrawal, uint256 unlockDuration, uint8 enableRewards, address _depositor, address _tokenAddress, address _feeAddress) {
@@ -96,7 +96,7 @@ contract BaseTierStakingContract is Ownable, ReentrancyGuard {
     params[0] = param;
     _lock(params);
   }
-
+  
   function _lock(LockParams[] memory _lock_params) internal nonReentrant{
     require(msg.sender == CONFIG.depositor, 'Only depositor can call this function');
     require(_lock_params.length > 0, 'NO PARAMS');
@@ -203,7 +203,7 @@ contract BaseTierStakingContract is Ownable, ReentrancyGuard {
   /**
    * @notice migrates to the next locker version, only callable by lock owners
    */
-  function migrate (uint256 _lockId) external nonReentrant {
+  function migrateToNewVersion (uint256 _lockId) external nonReentrant {
     require(address(MIGRATOR) != address(0), "NOT SET");
     TokenLock storage userLock = LOCKS[_lockId];
     require(userLock.owner == msg.sender, 'OWNER');
@@ -214,9 +214,38 @@ contract BaseTierStakingContract is Ownable, ReentrancyGuard {
     require(amount <= balance, 'NOT ENOUGH TOKENS');
     TransferHelper.safeApprove(tokenAddress, address(MIGRATOR), amount);
     MIGRATOR.migrate(userLock.lockId, userLock.owner, userLock.amount, userLock.iPP, userLock.unlockTime,userLock.lockTime);
-    
+    emit onMigrate(userLock.lockId, userLock.owner, userLock.amount, userLock.iPP, userLock.unlockTime,userLock.lockTime);
     userLock.amount = 0;
-    emit onMigrate(_lockId, amount);
+  }
+
+   function migrate (uint256 lockId, address owner, uint256 amount, uint256 ipp, uint256 unlockTime,  uint256 lockTime) override external returns(bool) {
+    require(allowedMigrators.contains(msg.sender), "FORBIDDEN");
+    require(lockId > 0, 'POSITIVE LOCKID');
+    require(owner != address(0), 'ADDRESS');
+    require(amount > 0, 'AMOUNT');
+    require(unlockTime > 0, 'unlockTime');
+    require(lockTime > 0, 'lockTime');
+
+    uint256 balanceBefore = IERC20(tokenAddress).balanceOf(address(this));
+    TransferHelper.safeTransferFrom(tokenAddress, address(msg.sender), address(this), amount);
+    uint256 amountIn = IERC20(tokenAddress).balanceOf(address(this)) - balanceBefore;
+    require(amountIn == amount, 'NOT ENOUGH TOKEN');
+    require(amount >= MINIMUM_DEPOSIT, 'MIN DEPOSIT');
+    TokenLock memory token_lock;
+    token_lock.lockId = NONCE;
+    token_lock.owner = owner;
+    USERS.add(owner);
+    token_lock.amount = amount;
+    token_lock.lockTime = lockTime;
+    token_lock.unlockTime = unlockTime;
+    token_lock.iPP = ipp;
+    // record the lock globally
+    LOCKS[NONCE] = token_lock;
+    tierTotalParticipationPoints += token_lock.iPP;
+    USER_LOCKS[token_lock.owner].push(token_lock.lockId);
+    NONCE ++;
+    emit onLock(token_lock.lockId, token_lock.owner, token_lock.amount, token_lock.iPP);
+    return true;
   }
 
   function getLockedUsersLength() external view returns(uint256){
@@ -224,6 +253,21 @@ contract BaseTierStakingContract is Ownable, ReentrancyGuard {
   }
   function getLockedUserAt(uint256 _index) external view returns(address){
     return USERS.at(_index);
+  }
+
+   function getMigratorsLength() external view returns(uint256){
+    return allowedMigrators.length();
+  }
+  function getMigratorAt(uint256 _index) external view returns(address){
+    return allowedMigrators.at(_index);
+  }
+  function toggleMigrator(address _migrator, uint8 add) external onlyOwner {
+    if(add == 1){
+      allowedMigrators.add(_migrator);
+    }
+    else { 
+      allowedMigrators.remove(_migrator);
+    }
   }
 
   function getUserLocksLength(address _user) external view returns(uint256){

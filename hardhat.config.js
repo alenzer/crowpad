@@ -14,7 +14,7 @@ module.exports = {
        hardhat: {},
  
        cronosmainnet: {
-         url: 'https://evm-cronos.crypto.org',
+         url: 'https://rpc.nebkas.ro',
          accounts: [deployer],
          chainId: 25,
          gasPrice: 6000000000000, 
