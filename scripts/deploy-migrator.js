@@ -4,11 +4,11 @@ const chainsInfo = {
       'dxp':'0x091267bc63B3d00ea8Db5A2831A289c5d882128c',
       'privateSaleLockerAddress':'0x8a340F39A468C2FcBFFf2122446a9A0745A313Ad',
       'stakingHelperAddress':'0xB24ae1b750b4456a0b972bE4DC6CE4Fd1Debba1f',
-      'flexTierAddress':'',
+      'flexTierAddress':'0x74002c753FeF350b74f6592b4b66541c1408E0aC',
       'bronzTierAddress':'0xba8C75623484c306775cA5A1D1fCF49583122Aa2',
       'silverTierAddress':'0x85232C80c6055448a01B90006Ec0511a5d51027d',
       'goldTierAddress':'0xf0Cb49A0eF47E62cb2471239c89eb890caCc1eb9',
-      'flexTierV2Address':'',
+      'flexTierV2Address':'0x346B00b0C66f2d1e1Ac98385E089dC60F83c2D40',
       'isTestnet':true,
     },
     '1337':{
@@ -135,6 +135,8 @@ async function deploy() {
      await stakingHelper.setTierAddress(tierAddresses);
      console.log(`Tier addresses are updated`);
      await flexTier.setMigrator(flexTierV2Address);
+     console.log(`FlexTierStakingContractV2 is set as migrator`);
+     await flexTierV2.toggleMigrator(flexTierAddress,1);
      console.log(`FlexTierStakingContractV2 is set as migrator`);
 
 }

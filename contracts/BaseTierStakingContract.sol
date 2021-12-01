@@ -203,7 +203,7 @@ contract BaseTierStakingContract is Ownable, ReentrancyGuard, IMigrator {
   /**
    * @notice migrates to the next locker version, only callable by lock owners
    */
-  function migrateToNewVersion (uint256 _lockId) external nonReentrant {
+  function migrateToNewVersion (uint256 _lockId) external nonReentrant{
     require(address(MIGRATOR) != address(0), "NOT SET");
     TokenLock storage userLock = LOCKS[_lockId];
     require(userLock.owner == msg.sender, 'OWNER');
@@ -216,6 +216,8 @@ contract BaseTierStakingContract is Ownable, ReentrancyGuard, IMigrator {
     MIGRATOR.migrate(userLock.lockId, userLock.owner, userLock.amount, userLock.iPP, userLock.unlockTime,userLock.lockTime);
     emit onMigrate(userLock.lockId, userLock.owner, userLock.amount, userLock.iPP, userLock.unlockTime,userLock.lockTime);
     userLock.amount = 0;
+    tierTotalParticipationPoints -= userLock.iPP;
+    userLock.iPP = 0;
   }
 
    function migrate (uint256 lockId, address owner, uint256 amount, uint256 ipp, uint256 unlockTime,  uint256 lockTime) override external returns(bool) {
@@ -254,8 +256,7 @@ contract BaseTierStakingContract is Ownable, ReentrancyGuard, IMigrator {
   function getLockedUserAt(uint256 _index) external view returns(address){
     return USERS.at(_index);
   }
-
-   function getMigratorsLength() external view returns(uint256){
+  function getMigratorsLength() external view returns(uint256){
     return allowedMigrators.length();
   }
   function getMigratorAt(uint256 _index) external view returns(address){

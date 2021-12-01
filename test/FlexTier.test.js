@@ -15,20 +15,25 @@ chai.use(solidity);
 
 const expect = chai.expect;
 describe("FlexTierStakingContract", async () => {
-  let deployerAddress, anotherUser1, flexTier, standardToken, deployer;
-
+  let deployerAddress, anotherUser1, flexTier, flexTierV2, flexTierAddress, standardToken, deployer;
+  
   beforeEach(async () => {
     const [owner, user1] = await ethers.getSigners();
     deployer = owner;
     anotherUser1 = user1;
     const Token = await ethers.getContractFactory("StandardToken");
-
     standardToken = await Token.deploy(owner.address, "Demo Token", "DT", 18, getEthers('1000000'));
     await standardToken.deployed();
     deployerAddress = owner.address;
     const FlexTierStakingContract = await ethers.getContractFactory('FlexTierStakingContract');
+
     flexTier = await FlexTierStakingContract.deploy(deployerAddress, standardToken.address, deployerAddress);
+    flexTierV2 = await FlexTierStakingContract.deploy(deployerAddress, standardToken.address, deployerAddress);
     await flexTier.deployed();
+    flexTierAddress = flexTier.address;
+    await flexTierV2.deployed();
+    await flexTier.setMigrator(flexTierV2.address);
+    await flexTierV2.toggleMigrator(flexTier.address,1);
   });
   describe("depositor", () => {
     it("should return the correct depositor address", async () => {
@@ -60,9 +65,18 @@ describe("FlexTierStakingContract", async () => {
     //   await expect(() => flexTier.singleLock(deployerAddress, getEthers('1001'))).to.changeTokenBalance(standardToken, deployer, getNegativeEthers('1001'));
     // });
 
-    it("should be successful for single lock with more than 1000 TOKENS", async () => {
+    it("should be successful for single lock with more than 1000 TOKENS and migrate", async () => {
       await standardToken.approve(flexTier.address, getEthers('1000'));
       await expect(() => flexTier.singleLock(deployerAddress, getEthers('1000'))).to.changeTokenBalance(standardToken, deployer, getNegativeEthers('1000'));
+      const lockId1 = await flexTier.USER_LOCKS(deployerAddress, 0);
+      console.log(lockId1);
+      await expect(flexTier.migrateToNewVersion(lockId1));
+      const newBalance = await standardToken.balanceOf(flexTierV2.address);
+      const oldBalance = await standardToken.balanceOf(flexTier.address);
+      console.log(oldBalance);
+      console.log(newBalance);
+      expect(oldBalance).to.equal(getEthers('0'));
+      expect(newBalance).to.equal(getEthers('1000'));
     });
 
     it("should be successful for single lock and it should same iPP for both users with sum to be matched", async () => {
