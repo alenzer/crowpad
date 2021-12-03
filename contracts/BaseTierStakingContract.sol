@@ -13,6 +13,9 @@ import "./IERC20.sol";
 interface IMigrator {
     function migrate(uint256 lockId, address owner, uint256 amount, uint256 ipp, uint256 unlockTime,  uint256 lockTime) external returns (bool);
 }
+interface IStakingHelper{
+    function isWithdrawlAllowed() external view returns (bool);
+}
 
 contract BaseTierStakingContract is Ownable, ReentrancyGuard, IMigrator {
   using EnumerableSet for EnumerableSet.AddressSet;
@@ -35,6 +38,7 @@ contract BaseTierStakingContract is Ownable, ReentrancyGuard, IMigrator {
     uint256 unlockDuration; // epoch timestamp
     address depositor;  // Depositor contract who is allowed to stake
     address feeAddress; // Address to receive the fee
+    address stakingHelper; // Address of the staking helper contract
   }
 
   struct LockParams {
@@ -61,7 +65,7 @@ contract BaseTierStakingContract is Ownable, ReentrancyGuard, IMigrator {
   event onMigrate(uint256 lockId, address owner, uint256 amount, uint256 ipp, uint256 unlockTime,  uint256 lockTime);
 
   
-  constructor (uint8 tierId, uint8 multiplier, uint8 emergencyWithdrawlFee, uint8 enableEarlyWithdrawal, uint256 unlockDuration, uint8 enableRewards, address _depositor, address _tokenAddress, address _feeAddress) {
+  constructor (uint8 tierId, uint8 multiplier, uint8 emergencyWithdrawlFee, uint8 enableEarlyWithdrawal, uint256 unlockDuration, uint8 enableRewards, address _depositor, address _tokenAddress, address _feeAddress, address _stakingHelper) public {
     tokenAddress = _tokenAddress;
     CONFIG.tierId = tierId;
     CONFIG.multiplier = multiplier;
@@ -69,6 +73,7 @@ contract BaseTierStakingContract is Ownable, ReentrancyGuard, IMigrator {
     CONFIG.unlockDuration = unlockDuration;
     CONFIG.enableEarlyWithdrawal = enableEarlyWithdrawal;
     CONFIG.depositor = _depositor;
+    CONFIG.stakingHelper  = _stakingHelper;
     CONFIG.feeAddress = _feeAddress;
     CONFIG.enableRewards = enableRewards;
   }
@@ -149,9 +154,9 @@ contract BaseTierStakingContract is Ownable, ReentrancyGuard, IMigrator {
    * @param _lockId the lockId of the lock to be withdrawn
    */
   function withdraw ( uint256 _lockId, uint256 _index, uint256 _amount) external nonReentrant {
+    require(IStakingHelper(CONFIG.stakingHelper).isWithdrawlAllowed(), 'NOT ALLOWED');
     TokenLock storage userLock = LOCKS[_lockId];
     require(userLock.unlockTime <= block.timestamp ||  CONFIG.enableEarlyWithdrawal == 1, 'Early withdrawal is disabled');
-    
     require(USER_LOCKS[msg.sender].length > _index, 'Index OOB');
     require(USER_LOCKS[msg.sender][_index] == _lockId, 'lockId NOT MATCHED');
     require(userLock.owner == msg.sender, 'OWNER');
@@ -187,6 +192,9 @@ contract BaseTierStakingContract is Ownable, ReentrancyGuard, IMigrator {
   
   function setDepositor(address _depositor) external onlyOwner {
     CONFIG.depositor = _depositor;
+  }
+  function setStakingHelper(address _stakingHelper) external onlyOwner {
+    CONFIG.stakingHelper = _stakingHelper;
   }
   function getPoolPercentagesWithUser(address _user) external view returns(uint256, uint256){
     return _getPoolPercentagesWithUser(_user);

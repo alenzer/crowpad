@@ -39,7 +39,7 @@ describe("StakingHelper", async () => {
     stakingHelper = await StakingHelper.deploy(startTime, endTime, standardToken.address, ppMultiplier, privateSaleMultiplier, privateSaleLockerAddress);
     await stakingHelper.deployed();
     const FlexTierStakingContract = await ethers.getContractFactory('FlexTierStakingContract');
-    flexTier = await FlexTierStakingContract.deploy(stakingHelper.address, standardToken.address, deployerAddress);
+    flexTier = await FlexTierStakingContract.deploy(stakingHelper.address, standardToken.address, deployerAddress,stakingHelper.address);
     await flexTier.deployed();
     await stakingHelper.setTierAddress([flexTier.address]);
   });

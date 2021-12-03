@@ -3,7 +3,9 @@ const { ethers, timeAndMine } = require("hardhat");
 const chai = require('chai');
 const { solidity } = require('ethereum-waffle');
 const { BigNumber } = require('@ethersproject/bignumber')
-
+function timeout(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 function getEthers(inputEther) {
   return BigNumber.from(ethers.utils.parseEther(inputEther))
 }
@@ -15,19 +17,30 @@ chai.use(solidity);
 
 const expect = chai.expect;
 describe("BronzeTierStakingContract", async () => {
-  let deployerAddress, anotherUser1, bronzeTier, standardToken, deployer;
+  let deployerAddress, anotherUser1,stakingHelper, bronzeTier, standardToken, deployer;
 
   beforeEach(async () => {
     const [owner, user1] = await ethers.getSigners();
     deployer = owner;
     anotherUser1 = user1;
+    ppMultiplier = 10000;
+    privateSaleMultiplier = 1;
     const Token = await ethers.getContractFactory("StandardToken");
-
-    standardToken = await Token.deploy(owner.address, "Demo Token", "DT", 18, getEthers('1000000'));
+    const startTime = (await deployer.provider.getBlock()).timestamp;
+    const endTime = startTime + (1000);
+    standardToken = await Token.deploy(owner.address, "Demo Token", "DT", 18, getEthers("1000000"));
     await standardToken.deployed();
+
+    const PrivateSaleLocker = await ethers.getContractFactory("MockTokenLocker");
+    const privateSaleLocker = await PrivateSaleLocker.deploy();
+    privateSaleLockerAddress = privateSaleLocker.address;
     deployerAddress = owner.address;
+
+    const StakingHelper = await ethers.getContractFactory("StakingHelper");
+    stakingHelper = await StakingHelper.deploy(startTime, endTime, standardToken.address, ppMultiplier, privateSaleMultiplier, privateSaleLockerAddress);
+    await stakingHelper.deployed();
     const BronzeTierStakingContract = await ethers.getContractFactory('BronzeTierStakingContract');
-    bronzeTier = await BronzeTierStakingContract.deploy(deployerAddress, standardToken.address, deployerAddress);
+    bronzeTier = await BronzeTierStakingContract.deploy(deployerAddress, standardToken.address, deployerAddress,stakingHelper.address);
     await bronzeTier.deployed();
   });
   describe("depositor", () => {
@@ -80,6 +93,24 @@ describe("BronzeTierStakingContract", async () => {
 
       expect(result1[0].toString()).to.equal(getEthers('36000'));
       expect(result1[1].toString()).to.equal(getEthers('36000'));
+    });
+    it("should fail for withdrawl if its done during suspension time", async () => {
+      await bronzeTier.changeUnlockDuration(1);
+      const startTime = (await deployer.provider.getBlock()).timestamp;
+      const endTime = startTime + (30);
+      await stakingHelper.setWithdrawalSuspension(startTime, endTime);
+      await standardToken.approve(bronzeTier.address, getEthers('3000'));
+      await expect(() => bronzeTier.singleLock(anotherUser1.address, getEthers('2000'))).to.changeTokenBalance(standardToken, deployer, getNegativeEthers('2000'));
+      await expect(() => bronzeTier.singleLock(deployerAddress, getEthers('1000'))).to.changeTokenBalance(standardToken, deployer, getNegativeEthers('1000'));
+      const result1 = await bronzeTier.getPoolPercentagesWithUser(anotherUser1.address);
+      const result2 = await bronzeTier.getPoolPercentagesWithUser(deployerAddress);
+      const lockId = bronzeTier.USER_LOCKS(anotherUser1.address, 0);
+      expect(bronzeTier.connect(anotherUser1).withdraw(lockId, 0, getEthers('100'))).to.be.revertedWith('NOT ALLOWED');
+      
+      expect(result1[0].toString()).to.equal(getEthers('24000'));
+      expect(result1[1].toString()).to.equal(getEthers('36000'));
+      expect(result2[0].toString()).to.equal(getEthers('12000'));
+      expect(result2[1].toString()).to.equal(getEthers('36000'));
     });
     it("should fail for withdrawl if its done before unlock duration", async () => {
       await standardToken.approve(bronzeTier.address, getEthers('3000'));

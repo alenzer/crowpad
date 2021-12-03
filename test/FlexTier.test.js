@@ -15,20 +15,33 @@ chai.use(solidity);
 
 const expect = chai.expect;
 describe("FlexTierStakingContract", async () => {
-  let deployerAddress, anotherUser1, flexTier, flexTierV2, flexTierAddress, standardToken, deployer;
+  let deployerAddress, anotherUser1, stakingHelper, flexTier, flexTierV2, flexTierAddress, standardToken, deployer;
   
   beforeEach(async () => {
     const [owner, user1] = await ethers.getSigners();
     deployer = owner;
     anotherUser1 = user1;
+    ppMultiplier = 10000;
+    privateSaleMultiplier = 1;
     const Token = await ethers.getContractFactory("StandardToken");
-    standardToken = await Token.deploy(owner.address, "Demo Token", "DT", 18, getEthers('1000000'));
+    const startTime = (await deployer.provider.getBlock()).timestamp;
+    const endTime = startTime + (1000);
+    standardToken = await Token.deploy(owner.address, "Demo Token", "DT", 18, getEthers("1000000"));
     await standardToken.deployed();
+
+    const PrivateSaleLocker = await ethers.getContractFactory("MockTokenLocker");
+    const privateSaleLocker = await PrivateSaleLocker.deploy();
+    privateSaleLockerAddress = privateSaleLocker.address;
     deployerAddress = owner.address;
+
+    const StakingHelper = await ethers.getContractFactory("StakingHelper");
+    stakingHelper = await StakingHelper.deploy(startTime, endTime, standardToken.address, ppMultiplier, privateSaleMultiplier, privateSaleLockerAddress);
+    await stakingHelper.deployed();
+
     const FlexTierStakingContract = await ethers.getContractFactory('FlexTierStakingContract');
 
-    flexTier = await FlexTierStakingContract.deploy(deployerAddress, standardToken.address, deployerAddress);
-    flexTierV2 = await FlexTierStakingContract.deploy(deployerAddress, standardToken.address, deployerAddress);
+    flexTier = await FlexTierStakingContract.deploy(deployerAddress, standardToken.address, deployerAddress, stakingHelper.address);
+    flexTierV2 = await FlexTierStakingContract.deploy(deployerAddress, standardToken.address, deployerAddress,  stakingHelper.address);
     await flexTier.deployed();
     flexTierAddress = flexTier.address;
     await flexTierV2.deployed();

@@ -18,8 +18,8 @@ contract BronzeTierStakingContract is BaseTierStakingContract {
   uint8 public enableEmergencyWithdrawl = 0;
   uint8 public enableRewards = 1; //enable rewards
   uint256 public unlockDuration = 30*24*60*60; // 1 month
-  constructor( address _depositor, address _tokenAddress, address _feeAddress)
-    BaseTierStakingContract(tierId,multiplier,emergencyWithdrawlFee,enableEmergencyWithdrawl,unlockDuration,enableRewards, _depositor, _tokenAddress, _feeAddress) {
+  constructor( address _depositor, address _tokenAddress, address _feeAddress, address _stakingHelper)
+    BaseTierStakingContract(tierId,multiplier,emergencyWithdrawlFee,enableEmergencyWithdrawl,unlockDuration,enableRewards, _depositor, _tokenAddress, _feeAddress, _stakingHelper) {
   }
   
 }

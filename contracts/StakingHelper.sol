@@ -22,12 +22,15 @@ interface ITokenLocker{
 }
 
 contract StakingHelper is Ownable, ReentrancyGuard, Pausable{
+    
     struct Settings{
         uint256 startTimeForDeposit;
         uint256 endTimeForDeposit;
         uint256 ppMultiplier;
         uint256 privateSaleMultiplier;
         uint256 privateSaleTotalPP;
+        uint256 withdrawalSuspensionStartTime;
+        uint256 withdrawalSuspensionEndTime;
         address tokenAddress;
     }
 
@@ -44,6 +47,8 @@ contract StakingHelper is Ownable, ReentrancyGuard, Pausable{
         SETTINGS.tokenAddress = _tokenAddress;
         SETTINGS.ppMultiplier = _ppMultiplier;
         SETTINGS.privateSaleMultiplier = _privateSaleMultiplier;
+        SETTINGS.withdrawalSuspensionEndTime = 0;
+        SETTINGS.withdrawalSuspensionStartTime = 0;
         privateSaleLockerAddress = _privateSaleLockerAddress;
     }
 
@@ -125,6 +130,13 @@ contract StakingHelper is Ownable, ReentrancyGuard, Pausable{
         }
         SETTINGS.privateSaleTotalPP = privateSaleTotalPP;
     }
+    function isWithdrawlAllowed() external view returns (bool){
+        return block.timestamp < SETTINGS.withdrawalSuspensionStartTime || block.timestamp > SETTINGS.withdrawalSuspensionEndTime;
+    }
 
+    function setWithdrawalSuspension(uint256 _withdrawalSuspensionStartTime, uint256 _withdrawalSuspensionEndTime) external onlyOwner{
+        SETTINGS.withdrawalSuspensionStartTime = _withdrawalSuspensionStartTime;
+        SETTINGS.withdrawalSuspensionEndTime = _withdrawalSuspensionEndTime;
+    }
 }
 
