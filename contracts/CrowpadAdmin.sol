@@ -5,11 +5,11 @@ pragma solidity ^0.8.0;
 import "./EnumerableSet.sol";
 import "./Ownable.sol";
 
-interface IDexPadAdmin {
+interface ICrowpadAdmin {
     function userIsAdmin(address _user) external view returns (bool);
 }
 
-contract DexPadAdmin is Ownable {
+contract CrowpadAdmin is Ownable {
   using EnumerableSet for EnumerableSet.AddressSet;
 
   EnumerableSet.AddressSet private ADMINS;

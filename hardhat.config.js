@@ -8,7 +8,7 @@
 const dev = fs.readFileSync('.secret').toString().trim()
 const deployer = fs.readFileSync('.secret.mainnet').toString().trim()
 module.exports = {
-    defaultNetwork: 'hardhat',
+    defaultNetwork: 'cronostestnet',
  
     networks: {
        hardhat: {},

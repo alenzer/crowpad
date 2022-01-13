@@ -28,14 +28,15 @@ describe("BronzeTierStakingContract", async () => {
     const Token = await ethers.getContractFactory("StandardToken");
     const startTime = (await deployer.provider.getBlock()).timestamp;
     const endTime = startTime + (1000);
+console.log("standardToken is deplying");    
     standardToken = await Token.deploy(owner.address, "Demo Token", "DT", 18, getEthers("1000000"));
     await standardToken.deployed();
-
+console.log("standardToken deployed");
     const PrivateSaleLocker = await ethers.getContractFactory("MockTokenLocker");
     const privateSaleLocker = await PrivateSaleLocker.deploy();
     privateSaleLockerAddress = privateSaleLocker.address;
     deployerAddress = owner.address;
-
+console.log(privateSaleLockerAddress);
     const StakingHelper = await ethers.getContractFactory("StakingHelper");
     stakingHelper = await StakingHelper.deploy(startTime, endTime, standardToken.address, ppMultiplier, privateSaleMultiplier, privateSaleLockerAddress);
     await stakingHelper.deployed();
